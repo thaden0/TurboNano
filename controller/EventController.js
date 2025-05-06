@@ -1,6 +1,8 @@
 const KeyEvent = require('../models/KeyEvent');
 const MenuService = require('../services/MenuService');
 const FileSelectModal = require('../modals/FileSelectModal');
+const FileService = require('../services/FileService');
+const FileMenu = require('../models/FileMenu');
 const fs = require('fs').promises;
 
 class EventController {
@@ -17,6 +19,10 @@ class EventController {
         this.events = [];
         /** @private */
         this.modalActive = false;
+        /** @private */
+        this.fileService = new FileService();
+        /** @private */
+        this.fileMenu = new FileMenu(this);
         
         // Initialize menu service
         this.menuService = new MenuService(screen);
@@ -65,13 +71,43 @@ class EventController {
     }
 
     /**
+     * Handles opening a file
+     * @private
+     */
+    async _handleOpen() {
+        this.modalActive = true;
+        const modal = new FileSelectModal(this.screen, {
+            startDir: process.cwd(),
+            onSelect: async (filePath) => {
+                try {
+                    const editFile = await this.fileService.getTextFile(filePath);
+                    const currentWindow = this.windowService.getCurrentWindow();
+                    currentWindow.currentFile = editFile;
+                    currentWindow.cursorX = 0;
+                    currentWindow.cursorY = 0;
+                    currentWindow.redraw();
+                } catch (error) {
+                    console.error('Error opening file:', error);
+                } finally {
+                    this.modalActive = false;
+                }
+            },
+            onCancel: () => {
+                this.modalActive = false;
+            }
+        });
+        modal.show();
+    }
+
+    /**
      * Sets up default menu items
      * @private
      */
     _setupDefaultMenuItems() {        
-        this.menuService.addEvent(new KeyEvent('C-s', () => this._handleSave()), 'Save');
-        this.menuService.addEvent(new KeyEvent('C-o', () => console.log('Open')), 'Open');
-        this.menuService.addEvent(new KeyEvent('C-q', () => process.exit(0)), 'Quit');
+        this.menuService.addEvent(
+            new KeyEvent('C-f', () => this.menuService.showMenu(this.fileMenu, 2, 2)),
+            'File'
+        );
     }
 
     /**

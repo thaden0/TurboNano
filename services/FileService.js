@@ -1,8 +1,13 @@
 const fs = require('fs').promises;
 const path = require('path');
 const EditFile = require('../models/EditFile');
+const IndentationService = require('./IndentationService');
 
 class FileService {
+    constructor() {
+        this.indentationService = new IndentationService();
+    }
+
     /**
      * Reads a text file and returns its content
      * @param {string} fileName - Path to the file
@@ -11,14 +16,15 @@ class FileService {
     async getTextFile(fileName) {
         try {
             const filePath = path.resolve(process.cwd(), fileName);
-            const fileData = await fs.readFile(filePath, 'utf8');
-            return new EditFile(fileName, fileData);
+            const content = await fs.readFile(filePath, 'utf8');
+            // Split content into lines and expand tabs
+            const lines = content.split('\n').map(line => {
+                return this.indentationService.expandTabs(line);
+            });
+            return new EditFile(fileName, lines);
         } catch (error) {
-            if (error.code === 'ENOENT') {
-                // Return new empty file if it doesn't exist
-                return new EditFile(fileName, '');
-            }
-            throw error;
+            console.error('Error reading file:', error);
+            return new EditFile(fileName, ['']);
         }
     }
 
