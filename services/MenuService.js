@@ -63,7 +63,7 @@ class MenuService {
       left:       0,
       width:      '100%',
       height:     1,
-      zIndex: 10,
+      zIndex:     100, // Ensure menu bar is on top of everything
       keys:       true,
       mouse:      true,
       // we supply our own keys, so disable autoCommandKeys
@@ -79,6 +79,14 @@ class MenuService {
       },
       commands   // the map of "Label → { keys, callback }"
     });
+
+    // Make sure listbar stays on top
+    this.currentListBar.setFront();
+    
+    // Add a default menu item if none exists
+    if (Object.keys(commands).length === 0) {
+      this.currentListBar.setContent('File (Ctrl+F)');
+    }
 
     this.screen.render();
   }
@@ -178,6 +186,25 @@ class MenuService {
       this.currentBox = null;
       this.currentMenu = null;
       this.screen.render();
+    }
+  }
+
+  /**
+   * Adds a complete menu to the service
+   * @param {Menu} menu - The menu to add
+   */
+  addMenu(menu) {
+    if (!menu) return;
+    
+    // If the menu has a label, create a key binding for it
+    if (menu.label) {
+      // When the menu key event is triggered, show the menu
+      const keyEvent = new KeyEvent(menu.shortcut || 'unknown', () => {
+        // Show menu at a position below the menu bar
+        this.showMenu(menu, 0, 1);
+      });
+      
+      this.addEvent(keyEvent, menu.label);
     }
   }
 }

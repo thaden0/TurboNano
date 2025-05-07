@@ -1,0 +1,44 @@
+syntax "JavaScript" "\.(js|jsx)$"
+
+# Keywords
+color yellow "\b(const|let|var|function|class|extends|return|if|else|for|while|do|switch|case|break|continue|try|catch|finally|throw|new|delete|typeof|instanceof|void|this|super)\b"
+
+# Built-in objects and functions
+color cyan "\b(Array|Boolean|Date|Error|Function|JSON|Math|Number|Object|RegExp|String|Promise|Map|Set|Symbol|console|window|document|null|undefined|NaN|Infinity)\b"
+
+# Booleans
+color brightcyan "\b(true|false)\b"
+
+# Strings
+color green "\"[^\"]*\""
+color green "'[^']*'"
+color green "`[^`]*`"
+
+# Numbers
+color magenta "\b[0-9]+\b"
+color magenta "\b[0-9]+\.[0-9]+\b"
+color magenta "\b0x[0-9a-fA-F]+\b"
+
+# Comments
+color blue "//.*$"
+color blue "/\*[\s\S]*?\*/"
+
+# Function declarations
+color yellow "function\s+[A-Za-z_][A-Za-z0-9_]*"
+color yellow "\b[A-Za-z_][A-Za-z0-9_]*\s*\([^)]*\)\s*{"
+
+# Arrow functions
+color yellow "=>\s*{"
+color yellow "=>\s*[^{\n]+"
+
+# Method declarations
+color yellow "\b[A-Za-z_][A-Za-z0-9_]*\s*\([^)]*\)\s*{" 
+
+# Punctuation and symbols
+color red "[;:,.<>/\(\)\[\]\{\}=\+\-\*/%&\|\^!~?]"
+
+# Properties after dot
+color brightwhite "\.[A-Za-z][A-Za-z0-9_]*"
+
+# Variables and identifiers (lower priority than keywords)
+color white "\b[A-Za-z_][A-Za-z0-9_]*\b" 

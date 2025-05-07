@@ -5,14 +5,20 @@
   "main": "app.js",
   "scripts": {
     "start": "node app.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "jest"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "@types/blessed": "^0.1.25",
+    "axios": "^1.9.0",
     "blessed": "^0.1.81",
-    "blessed-contrib": "^4.11.0"
+    "blessed-contrib": "^4.11.0",
+    "clipboardy": "^2.3.0",
+    "openai": "^4.97.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
   }
 }

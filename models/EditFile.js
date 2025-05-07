@@ -1,3 +1,7 @@
+/**
+ * @class
+ * @implements {import('../interfaces/IEditFile').IEditFile}
+ */
 class EditFile {
     /**
      * @param {string} fileName - The name of the file
@@ -49,6 +53,17 @@ class EditFile {
         } else {
             this.fileData[y] = line.slice(0, x) + text + line.slice(x + text.length);
         }
+    }
+
+    /**
+     * Deletes a character at the specified position
+     * @param {number} x - The character position
+     * @param {number} y - The line number
+     */
+    deleteChar(x, y) {
+        this._ensureCharacterExists(x, y);
+        const line = this.fileData[y];
+        this.fileData[y] = line.slice(0, x) + line.slice(x + 1);
     }
 }
 

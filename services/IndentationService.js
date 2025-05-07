@@ -1,8 +1,9 @@
-const ConfigService = require('./ConfigService');
+const configService = require('./ConfigService');
 
 class IndentationService {
     constructor() {
-        this.configService = new ConfigService();
+        // Use the singleton configService directly
+        this.configService = configService;
     }
 
     /**
@@ -13,12 +14,12 @@ class IndentationService {
      * @returns {string} The indentation string
      */
     getIndentation(column) {
-        const useTabs = this.configService.getConfig('editor.useTabs');
+        const useTabs = this.configService.get('editor.useTabs', false);
         
         if (useTabs) {
             return '\t';
         } else {
-            const indentSize = this.configService.getConfig('editor.indentSize');
+            const indentSize = this.configService.get('editor.indentSize', 4);
             // Calculate next indent stop
             const nextStop = Math.ceil((column + 1) / indentSize) * indentSize;
             const spacesNeeded = nextStop - column;
@@ -33,7 +34,7 @@ class IndentationService {
      * @returns {string} Text with tabs converted to spaces
      */
     expandTabs(text, startColumn = 0) {
-        const tabSize = this.configService.getConfig('editor.tabSize');
+        const tabSize = this.configService.get('editor.tabSize', 4);
         let result = '';
         let currentColumn = startColumn;
 

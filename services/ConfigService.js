@@ -1,111 +1,162 @@
 const fs = require('fs').promises;
 const path = require('path');
 const os = require('os');
+const logger = require('./LoggingService');
 
+/**
+ * Service for managing application configuration
+ */
 class ConfigService {
+    /**
+     * Creates a new instance of the ConfigService
+     */
     constructor() {
-        this.configPath = path.join(os.homedir(), '.turbollama', 'config.json');
-        this.config = null;
-        this.defaultConfig = {
+        // Default configuration
+        this.config = {
+            openaiApiKey: process.env.OPENAI_API_KEY || '',
+            theme: 'default',
+            fontSize: 12,
+            tabWidth: 4,
+            defaultModel: 'gpt-3.5-turbo',
+            aiProvider: 'openai', // Can be 'openai' or 'ollama'
+            ollama: {
+                baseUrl: 'http://localhost:11434',
+                model: 'llama3'
+            },
             editor: {
-                tabSize: 4,
+                tabSize: 4, 
                 indentSize: 4,
                 useTabs: false
             }
         };
+        
+        // Create the ~/.turbollama directory if it doesn't exist
+        this.configDir = path.join(os.homedir(), '.turbollama');
+        this.ensureConfigDirExists();
+        
+        // Path to configuration file
+        this.configPath = path.join(this.configDir, 'config.json');
+        
+        // Load configuration
         this.loadConfig();
     }
-
+    
     /**
-     * Load the config file once during initialization
+     * Ensures the configuration directory exists
      * @private
+     */
+    async ensureConfigDirExists() {
+        try {
+            await fs.mkdir(this.configDir, { recursive: true });
+            logger.info('ConfigService', `Ensured config directory exists: ${this.configDir}`);
+        } catch (error) {
+            logger.error('ConfigService', `Error creating config directory: ${error.message}`);
+        }
+    }
+    
+    /**
+     * Loads configuration from file
      */
     async loadConfig() {
         try {
-            // Ensure directory exists
-            await fs.mkdir(path.dirname(this.configPath), { recursive: true });
+            const configData = await fs.readFile(this.configPath, 'utf8');
+            const loadedConfig = JSON.parse(configData);
             
-            try {
-                const data = await fs.readFile(this.configPath, 'utf8');
-                this.config = JSON.parse(data);
-            } catch (error) {
-                // If file doesn't exist or is invalid, use default config
-                this.config = this.defaultConfig;
-                // Save default config
-                await fs.writeFile(this.configPath, JSON.stringify(this.defaultConfig, null, 2));
+            // Merge with defaults
+            this.config = {
+                ...this.config,
+                ...loadedConfig
+            };
+            
+            // Ensure editor settings are preserved
+            if (loadedConfig.editor) {
+                this.config.editor = {
+                    ...this.config.editor,
+                    ...loadedConfig.editor
+                };
             }
+            
+            logger.info('ConfigService', 'Configuration loaded successfully');
         } catch (error) {
-            console.error('Error loading config:', error);
-            this.config = this.defaultConfig;
+            // If file doesn't exist or has errors, create default config
+            if (error.code === 'ENOENT') {
+                logger.info('ConfigService', 'Configuration file not found, using defaults');
+                await this.saveConfig();
+            } else {
+                logger.error('ConfigService', `Error loading configuration: ${error.message}`);
+            }
         }
     }
-
+    
     /**
-     * Get a value from the config using a path string
-     * @param {string} path - Path to the config value (e.g., 'editor.tabSize' or 'users[1].name')
-     * @returns {any} The value at the specified path
+     * Saves configuration to file
      */
-    getConfig(path) {
-        return this._resolvePath(this.config, path);
-    }
-
-    /**
-     * Set a value in the config using a path string
-     * @param {string} path - Path to the config value
-     * @param {any} value - Value to set
-     */
-    async setConfig(path, value) {
-        this._setValueAtPath(this.config, path, value);
+    async saveConfig() {
         try {
-            await fs.writeFile(this.configPath, JSON.stringify(this.config, null, 2));
-        } catch (error) {
-            console.error('Error saving config:', error);
-        }
-    }
-
-    /**
-     * Resolve a path string to a value in an object
-     * @private
-     * @param {Object} obj - Object to search in
-     * @param {string} path - Path to resolve
-     * @returns {any} Value at the path
-     */
-    _resolvePath(obj, path) {
-        return path.split(/[\.\[\]]/).filter(Boolean).reduce((current, part) => {
-            if (current === undefined) return undefined;
-            // Handle array indices
-            if (/^\d+$/.test(part)) {
-                return current[parseInt(part)];
-            }
-            return current[part];
-        }, obj);
-    }
-
-    /**
-     * Set a value at a path in an object
-     * @private
-     * @param {Object} obj - Object to modify
-     * @param {string} path - Path to set
-     * @param {any} value - Value to set
-     */
-    _setValueAtPath(obj, path, value) {
-        const parts = path.split(/[\.\[\]]/).filter(Boolean);
-        let current = obj;
-        
-        for (let i = 0; i < parts.length - 1; i++) {
-            const part = parts[i];
-            const nextPart = parts[i + 1];
-            const isNextArray = /^\d+$/.test(nextPart);
+            // Ensure the directory exists
+            await this.ensureConfigDirExists();
             
-            if (!(part in current)) {
-                current[part] = isNextArray ? [] : {};
-            }
-            current = current[part];
+            await fs.writeFile(
+                this.configPath,
+                JSON.stringify(this.config, null, 2),
+                'utf8'
+            );
+            logger.info('ConfigService', 'Configuration saved successfully');
+            return true;
+        } catch (error) {
+            logger.error('ConfigService', `Error saving configuration: ${error.message}`);
+            return false;
         }
-        
-        const lastPart = parts[parts.length - 1];
-        current[lastPart] = value;
+    }
+    
+    /**
+     * Gets a configuration value
+     * @param {string} key - Configuration key
+     * @param {*} defaultValue - Default value if key is not found
+     * @returns {*} Configuration value
+     */
+    get(key, defaultValue = null) {
+        return key in this.config ? this.config[key] : defaultValue;
+    }
+    
+    /**
+     * Sets a configuration value
+     * @param {string} key - Configuration key
+     * @param {*} value - Configuration value
+     * @returns {boolean} True if successful
+     */
+    async set(key, value) {
+        this.config[key] = value;
+        return await this.saveConfig();
+    }
+    
+    /**
+     * Gets the OpenAI API key
+     * @returns {string} API key
+     */
+    getApiKey() {
+        return this.config.openaiApiKey || process.env.OPENAI_API_KEY || '';
+    }
+    
+    /**
+     * Sets the OpenAI API key
+     * @param {string} apiKey - The API key
+     * @returns {boolean} True if successful
+     */
+    async setApiKey(apiKey) {
+        return await this.set('openaiApiKey', apiKey);
+    }
+    
+    /**
+     * Gets the configuration file path
+     * @returns {string} Path to the configuration file
+     */
+    getConfigFile() {
+        return this.configPath;
     }
 }
 
-module.exports = ConfigService; 
+// Create a singleton instance
+const configService = new ConfigService();
+
+module.exports = configService; 
