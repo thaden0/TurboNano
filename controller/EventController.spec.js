@@ -3,13 +3,13 @@ const KeyEvent = require('../models/KeyEvent');
 const MenuService = require('../services/MenuService');
 const FileSelectModal = require('../modals/FileSelectModal');
 const FileService = require('../services/FileService');
-const FileMenu = require('../models/FileMenu');
+const FileMenu = require('../models/menus/FileMenu');
 
 // Mock dependencies
 jest.mock('../services/MenuService');
 jest.mock('../modals/FileSelectModal');
 jest.mock('../services/FileService');
-jest.mock('../models/FileMenu');
+jest.mock('../models/menus/FileMenu');
 
 describe('EventController', () => {
     let controller;
@@ -61,15 +61,33 @@ describe('EventController', () => {
         });
 
         it('should set up file menu items', () => {
-            expect(mockFileMenu.addItem).toHaveBeenCalledTimes(4);
+            expect(mockFileMenu.addItem).toHaveBeenCalledTimes(8);
             expect(mockFileMenu.addItem).toHaveBeenCalledWith('New File', expect.any(Function));
             expect(mockFileMenu.addItem).toHaveBeenCalledWith('Open File', expect.any(Function));
             expect(mockFileMenu.addItem).toHaveBeenCalledWith('Save File', expect.any(Function));
+            expect(mockFileMenu.addItem).toHaveBeenCalledWith('File Explorer', expect.any(Function));
+            expect(mockFileMenu.addItem).toHaveBeenCalledWith('AI Prompt', expect.any(Function));
+            expect(mockFileMenu.addItem).toHaveBeenCalledWith('Settings', expect.any(Function));
+            expect(mockFileMenu.addItem).toHaveBeenCalledWith('Close Window', expect.any(Function));
             expect(mockFileMenu.addItem).toHaveBeenCalledWith('Exit', expect.any(Function));
         });
 
-        it('should set up Ctrl-F shortcut for file menu', () => {
+        it('should set up keyboard shortcuts', () => {
+            // Check for file menu shortcut
             expect(mockScreen.key).toHaveBeenCalledWith(['C-f'], expect.any(Function));
+            
+            // Check for file explorer shortcuts (both Ctrl-E and Ctrl-B)
+            expect(mockScreen.key).toHaveBeenCalledWith(['C-e'], expect.any(Function));
+            expect(mockScreen.key).toHaveBeenCalledWith(['C-b'], expect.any(Function));
+            
+            // Check for AI prompt shortcut
+            expect(mockScreen.key).toHaveBeenCalledWith(['C-p'], expect.any(Function));
+            
+            // Check for window cycling shortcut
+            expect(mockScreen.key).toHaveBeenCalledWith(['f6'], expect.any(Function));
+            
+            // Check for close window shortcut
+            expect(mockScreen.key).toHaveBeenCalledWith(['C-w'], expect.any(Function));
         });
     });
 
@@ -193,6 +211,32 @@ describe('EventController', () => {
         });
     });
 
+    describe('_handleCloseWindow', () => {
+        it('should close the current window and select the next if multiple windows exist', async () => {
+            // Mock the windowService with required functions
+            mockWindowService.next = jest.fn();
+            mockWindowService.removeWindow = jest.fn();
+            mockWindowService.windows = [{ window: mockCurrentWindow }, { window: {} }];
+            
+            await controller._handleCloseWindow();
+            
+            expect(mockWindowService.next).toHaveBeenCalled();
+            expect(mockWindowService.removeWindow).toHaveBeenCalledWith(mockCurrentWindow);
+        });
+        
+        it('should not close window if it is the last one', async () => {
+            // Mock the windowService with required functions
+            mockWindowService.next = jest.fn();
+            mockWindowService.removeWindow = jest.fn();
+            mockWindowService.windows = [{ window: mockCurrentWindow }];
+            
+            await controller._handleCloseWindow();
+            
+            expect(mockWindowService.next).not.toHaveBeenCalled();
+            expect(mockWindowService.removeWindow).not.toHaveBeenCalled();
+        });
+    });
+
     describe('press', () => {
         it('should handle matching key events', async () => {
             const mockCallback = jest.fn();
@@ -203,9 +247,25 @@ describe('EventController', () => {
             expect(mockCallback).toHaveBeenCalled();
         });
 
-        it('should forward key press to window when no modal is active', async () => {
+        it('should forward key press to window when no modal is active and not a FileExplorer', async () => {
+            // Mock getCurrentWindow to return a window with a known constructor name (not FileExplorer)
+            mockCurrentWindow.constructor = { name: 'EditWindow' };
+            mockWindowService.getCurrentWindow.mockReturnValue(mockCurrentWindow);
+            
             await controller.press({ full: 'test' });
             expect(mockCurrentWindow.press).toHaveBeenCalled();
+        });
+
+        it('should not forward key press to FileExplorer window', async () => {
+            // Mock getCurrentWindow to return a FileExplorer window
+            const mockFileExplorerWindow = {
+                constructor: { name: 'FileExplorer' },
+                press: jest.fn()
+            };
+            mockWindowService.getCurrentWindow.mockReturnValue(mockFileExplorerWindow);
+            
+            await controller.press({ full: 'test' });
+            expect(mockFileExplorerWindow.press).not.toHaveBeenCalled();
         });
 
         it('should not forward key press to window when modal is active', async () => {

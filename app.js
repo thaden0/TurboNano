@@ -1,40 +1,18 @@
-const blessed = require('blessed');
-const KeyEvent = require('./models/KeyEvent');
-const WindowService = require('./services/WindowService');
-const EventController = require('./controller/EventController');
+// Import reflect-metadata at the very top
+require('reflect-metadata');
+
+const container = require('./ioc/container');
+const TYPES = require('./ioc/types/TYPES');
+const logger = require('./services/LoggingService');
 
 // Set log level to debug for development
 process.env.LOG_LEVEL = 'debug';
 
-const logger = require('./services/LoggingService');
-
-// Create a screen object
-const screen = blessed.screen({
-  smartCSR: true,
-  title: 'TurboNano',
-  cursor: {
-    artificial: true,
-    shape: 'line',
-    blink: true,
-    color: null // Use default terminal cursor color
-  }
-});
-
-// Create background first
-const background = blessed.box({
-  top: 0,
-  left: 0,
-  width: '100%',
-  height: '100%',
-  tags: false,
-  style: {
-    fg: 'gray',
-    bg: 'black'
-  },
-  zIndex: 0 // Set background to lowest z-index
-});
-
-screen.append(background);
+// Get services from container
+const screen = container.get(TYPES.Screen);
+const background = container.get(TYPES.Background);
+const eventController = container.get(TYPES.EventController);
+const windowService = container.get(TYPES.WindowService);
 
 function fill(char = '░') {
   const width = screen.width;
@@ -57,15 +35,6 @@ fill();
 screen.on('resize', () => {
   fill();
 });
-
-// Create services - ensure EventController is created before WindowService
-// to make sure menu bar has higher z-index
-const eventController = new EventController(screen, null); // Pass null initially
-const windowService = new WindowService(screen);
-
-// Now update the windowService reference in the eventController
-eventController.windowService = windowService;
-
 
 // Ensure screen is re-rendered to show menu bar
 screen.render();
@@ -97,6 +66,20 @@ screen.on('keypress', async (ch, key) => {
     return;
   }
   
+  // Close current window with Ctrl+W
+  if (key && key.full === 'C-w') {
+    const currentWindow = windowService.getCurrentWindow();
+    // Make sure we don't close the last window
+    if (currentWindow && windowService.windows.length > 1) {
+      logger.info('App', 'Closing current window with Ctrl+W');
+      // Switch to next window first, then remove the current one
+      windowService.next();
+      windowService.removeWindow(currentWindow);
+      screen.render();
+      return;
+    }
+  }
+  
   await eventController.press(key);
 });
 
@@ -107,17 +90,15 @@ const fileName = process.argv[2] || '';
 logger.info('App', 'Editor started successfully');
 if (fileName) {
   logger.info('App', `Opening file: ${fileName}`);
+  
+  // Open the specified file if provided as an argument
+  windowService.openFile(fileName).catch(error => {
+    logger.error('App', `Error opening file "${fileName}":`, error);
+  });
 } else {
-  logger.info('App', 'Opening new empty file');
+  logger.info('App', 'Using default empty file');
+  // Don't create another window since WindowService already created one
 }
-
-
-// Open the specified file or create a new empty file if no argument provided
-windowService.openFile(fileName).catch(error => {
-  logger.error('App', `Error opening file "${fileName}":`, error);
-  // If there's an error opening the file, create a new empty file
-  windowService.openFile('').catch(console.error);
-});
 
 // Final render of the screen
 screen.render();

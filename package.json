@@ -1,7 +1,7 @@
 {
-  "name": "blessed-app",
+  "name": "turbonano",
   "version": "1.0.0",
-  "description": "",
+  "description": "A terminal-based text editor",
   "main": "app.js",
   "scripts": {
     "start": "node app.js",
@@ -16,7 +16,9 @@
     "blessed": "^0.1.81",
     "blessed-contrib": "^4.11.0",
     "clipboardy": "^2.3.0",
-    "openai": "^4.97.0"
+    "inversify": "^6.0.2",
+    "openai": "^4.97.0",
+    "reflect-metadata": "^0.2.1"
   },
   "devDependencies": {
     "jest": "^29.7.0"

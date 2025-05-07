@@ -54,6 +54,13 @@ class AIPrompt {
         this.addEvent(new KeyEvent('escape', async () => await this._handleEscape()));
         // Add additional key binding for Escape key that some terminals might send
         this.addEvent(new KeyEvent('C-[', async () => await this._handleEscape()));
+        // Add Tab key to switch to next window
+        this.addEvent(new KeyEvent('tab', async () => {
+            if (this.windowService && this.windowService.next) {
+                logger.debug('AIPrompt', 'Tab pressed, switching to next window');
+                this.windowService.next();
+            }
+        }));
     }
     
     /**
@@ -82,6 +89,13 @@ class AIPrompt {
         
         // Log the key information for debugging
         logger.debug('AIPrompt', `Key pressed: name=${key.name}, full=${key.full}, sequence=${JSON.stringify(key.sequence)}`);
+        
+        // Skip handling specific control keys that should be handled by EventController or app.js
+        const globalControlKeys = ['C-w', 'C-f', 'C-e', 'C-b', 'C-tab', 'M-tab', 'f6'];
+        if (globalControlKeys.includes(key.full)) {
+            logger.debug('AIPrompt', `Skipping processing of global control key: ${key.full}`);
+            return;
+        }
         
         let eventFound = false;
         // Find and execute all matching event handlers
@@ -123,10 +137,30 @@ class AIPrompt {
             
             logger.debug('AIPrompt', `Redrawing with text: "${displayText.substring(0, 50)}${displayText.length > 50 ? '...' : ''}"`);
             
+            // Set element content, show placeholder text if no prompt is entered
             element.setContent(displayText || 'Type your AI prompt here...');
+            
+            // Add cursor indicator
+            if (element.content) {
+                // Get content as array of lines
+                const lines = element.content.split('\n');
+                
+                // Insert cursor indicator at current position
+                if (lines.length > 0) {
+                    const line = lines[0];
+                    const cursorPos = Math.min(this.cursorX, line.length);
+                    
+                    // Insert cursor indicator (underscore character)
+                    const newLine = line.substring(0, cursorPos) + '{inverse}__{/inverse}' + line.substring(cursorPos);
+                    lines[0] = newLine;
+                    
+                    element.setContent(lines.join('\n'));
+                }
+            }
+            
             this.windowService.screen.render();
             
-            // re-position the terminal cursor after redrawing
+            // Re-position the terminal cursor after redrawing
             this.windowService.updateCursor();
         }
     }
@@ -374,11 +408,14 @@ class AIPrompt {
     createUIElement(blessed) {
         const style = this.getStyle();
         
-        return blessed.textarea({
+        // Use a basic box instead of textarea to avoid blessed's key handling
+        return blessed.box({
             top: 0,
             left: 0,
             width: '100%',
             height: this.height || 3,
+            content: 'Type your AI prompt here...',
+            tags: true,
             ...style
         });
     }

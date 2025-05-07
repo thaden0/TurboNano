@@ -3,14 +3,19 @@ const MenuService = require('../services/MenuService');
 const FileSelectModal = require('../modals/FileSelectModal');
 const FileService = require('../services/FileService');
 const FileMenu = require('../models/menus/FileMenu');
+const ViewMenu = require('../models/menus/ViewMenu');
+const AIMenu = require('../models/menus/AIMenu');
+const TYPES = require('../ioc/types/TYPES');
 /** @typedef {import('../interfaces/IWindow')} IWindow */
 
 class EventController {
     /**
      * @param {Object} screen - The blessed screen instance
      * @param {Object} windowService - The window service instance
+     * @param {Object} menuService - The menu service instance
+     * @param {Object} fileService - The file service instance
      */
-    constructor(screen, windowService) {
+    constructor(screen, windowService, menuService, fileService) {
         /** @private */
         this.screen = screen;
         /** @private */
@@ -20,22 +25,29 @@ class EventController {
         /** @private */
         this.modalActive = false;
         /** @private */
-        this.fileService = new FileService();
+        this.fileService = fileService;
         /** @private */
-        this.menuService = new MenuService(screen);
+        this.menuService = menuService;
         
         // Add file menu
         const fileMenu = new FileMenu(this.menuService, 'File', 'C-f');
         fileMenu.addItem('New File', async () => await this._handleNew());
         fileMenu.addItem('Open File', async () => await this._handleOpen());
         fileMenu.addItem('Save File', async () => await this._handleSave());
-        fileMenu.addItem('File Explorer', async () => await this._handleFileExplorer());
-        fileMenu.addItem('AI Prompt', async () => await this._handleAIPrompt());
         fileMenu.addItem('Settings', async () => await this._handleSettings());
+        fileMenu.addItem('Close Window', async () => await this._handleCloseWindow());
         fileMenu.addItem('Exit', () => process.exit(0));
         
-        // Register the menu with the menu service
+        // Add view menu
+        const viewMenu = new ViewMenu(this.windowService);
+        
+        // Add AI menu
+        const aiMenu = new AIMenu(this.windowService);
+        
+        // Register the menus with the menu service
         this.menuService.addMenu(fileMenu);
+        this.menuService.addMenu(viewMenu);
+        this.menuService.addMenu(aiMenu);
 
         // Add Ctrl-F to show file menu
         this.screen.key(['C-f'], () => {
@@ -44,15 +56,31 @@ class EventController {
             }
         });
         
-        // Add Ctrl-P to activate AI Prompt
-        this.screen.key(['C-p'], () => {
+        // Add Ctrl-V to show view menu
+        this.screen.key(['C-v'], () => {
             if (!this.modalActive) {
-                this._handleAIPrompt();
+                this.menuService.showMenu(viewMenu, 0, 1);
             }
         });
         
-        // Add Ctrl-E to toggle File Explorer
+        // Add Ctrl-A to show AI menu
+        this.screen.key(['C-a'], () => {
+            if (!this.modalActive) {
+                this.menuService.showMenu(aiMenu, 0, 1);
+            }
+        });
+        
+        // Add keyboard shortcuts for File Explorer
+        // Both Ctrl-E and Ctrl-B can be used to toggle the explorer
+        // Ctrl-E is common in many editors, while Ctrl-B is familiar to VS Code users
         this.screen.key(['C-e'], () => {
+            if (!this.modalActive) {
+                this._handleFileExplorer();
+            }
+        });
+        
+        // Add Ctrl-B to toggle File Explorer (alternative shortcut)
+        this.screen.key(['C-b'], () => {
             if (!this.modalActive) {
                 this._handleFileExplorer();
             }
@@ -62,6 +90,13 @@ class EventController {
         this.screen.key(['f6'], () => {
             if (!this.modalActive && this.windowService) {
                 this.windowService.next();
+            }
+        });
+        
+        // Add Ctrl-W to close the current window and select the next
+        this.screen.key(['C-w'], () => {
+            if (!this.modalActive && this.windowService) {
+                this._handleCloseWindow();
             }
         });
     }
@@ -135,16 +170,6 @@ class EventController {
     }
 
     /**
-     * Handles activating the AI Prompt
-     * @private
-     */
-    async _handleAIPrompt() {
-        if (this.windowService) {
-            this.windowService.createAIPrompt();
-        }
-    }
-
-    /**
      * Handles opening the settings window
      * @private
      */
@@ -161,6 +186,24 @@ class EventController {
     async _handleFileExplorer() {
         if (this.windowService) {
             this.windowService.createFileExplorer();
+        }
+    }
+
+    /**
+     * Handles closing the current window and selecting the next
+     * @private
+     */
+    async _handleCloseWindow() {
+        if (this.windowService) {
+            const currentWindow = this.windowService.getCurrentWindow();
+            if (currentWindow) {
+                // Make sure we don't close the last window
+                if (this.windowService.windows.length > 1) {
+                    // Switch to next window first, then remove the current one
+                    this.windowService.next();
+                    this.windowService.removeWindow(currentWindow);
+                }
+            }
         }
     }
 
@@ -207,9 +250,15 @@ class EventController {
 
         // Only forward key press to window if no modal is active
         if (!this.modalActive) {
-            await this.windowService.getCurrentWindow().press(key);
+            const currentWindow = this.windowService.getCurrentWindow();
+            if (currentWindow) {
+                await currentWindow.press(key);
+            }
         }
     }
 }
 
-module.exports = EventController;
+// Export a factory function for InversifyJS
+module.exports = (screen, windowService, menuService, fileService) => {
+    return new EventController(screen, windowService, menuService, fileService);
+};

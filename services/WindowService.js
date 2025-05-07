@@ -26,20 +26,14 @@ class WindowService {
         // make sure the terminal cursor is visible
         this.screen.program.showCursor();
 
-        // Handle key events - direct to current window
-        this.screen.on('keypress', async (ch, key) => {
-            if (this.currentWindow) {
-                await this.currentWindow.press(key);
-            }
-        });
-        
         // Handle window resize
         this.screen.on('resize', async () => {
             await this.recalculateLayout();
         });
         
-        // Create an initial empty window
-        this.addWindow(this.windowFactory.createEmptyWindow(this));
+        // Create an initial empty window with all four sides anchored
+        // This ensures it will always fill the entire available space
+        this.addWindow(this.windowFactory.createEmptyWindow(this, true, true, true, true));
     }
     
     /**
@@ -59,21 +53,21 @@ class WindowService {
             logger.warn('WindowService', 'Window does not implement createUIElement, using default box');
             element = blessed.box({
                 top: 0,
-                left: 0,
-                width: '100%',
+            left: 0,
+            width: '100%',
                 height: '100%',
                 tags: true,
+            border: {
+                type: 'line',
+            },
+            style: {
                 border: {
-                    type: 'line',
-                },
-                style: {
-                    border: {
-                        fg: 'yellow',
+                    fg: 'yellow',
                     },
                     bg: 'blue',
-                },
-                mouse: true
-            });
+            },
+            mouse: true
+        });
         }
         
         // Add the element to the screen
@@ -200,98 +194,85 @@ class WindowService {
     }
     
     /**
-     * Recalculates the layout of all windows based on their anchor properties
+     * Recalculates the layout of all windows
      * @returns {Promise<void>}
      */
     async recalculateLayout() {
+        logger.debug('WindowService', 'Recalculating layout');
+        
         // Get screen dimensions
         const screenWidth = this.screen.width;
         const screenHeight = this.screen.height;
-        const availableHeight = screenHeight - this.menuBarHeight;
+        const menuBarHeight = this.menuBarHeight;
         
-        // Track used space
-        const usedSpace = {
-            top: this.menuBarHeight,
-            bottom: 0,
-            left: 0,
-            right: 0
-        };
+        // Find specific window types
+        const fileExplorerEntries = this.windows.filter(entry => entry.window instanceof FileExplorer);
+        const aiPromptEntries = this.windows.filter(entry => entry.window instanceof AIPrompt);
+        const otherWindows = this.windows.filter(entry => 
+            !(entry.window instanceof FileExplorer) && 
+            !(entry.window instanceof AIPrompt));
         
-        // First pass: Position anchored windows
-        for (const { window, element } of this.windows) {
-            if (window.anchorTop || window.anchorBottom || 
-                window.anchorLeft || window.anchorRight) {
+        // Log window counts
+        logger.debug('WindowService', `Window counts - FileExplorers: ${fileExplorerEntries.length}, AIPrompts: ${aiPromptEntries.length}, Others: ${otherWindows.length}`);
+        
+        // Step 1: Place FileExplorer if present (always on left side)
+        let fileExplorerWidth = 0;
+        if (fileExplorerEntries.length > 0) {
+            for (const { window, element } of fileExplorerEntries) {
+                // Calculate dimensions
+                element.top = menuBarHeight;
+                element.left = 0;
+                element.width = window.width || 30; // Default width if not specified
+                element.height = screenHeight - menuBarHeight;
                 
-                // Calculate dimensions for top/bottom anchored windows
-                if (window.anchorTop && window.anchorBottom) {
-                    // Full height window
-                    element.top = usedSpace.top;
-                    element.height = availableHeight - usedSpace.bottom - usedSpace.top;
-                    
-                    // Update used space
-                    if (window.height !== null) {
-                        const heightValue = Math.min(window.height, availableHeight - usedSpace.bottom - usedSpace.top);
-                        element.height = heightValue;
-                    }
-                } else if (window.anchorTop) {
-                    // Top anchored
-                    element.top = usedSpace.top;
-                    element.height = window.height !== null ? window.height : Math.floor(availableHeight / 2);
-                    
-                    // Update used space
-                    usedSpace.top += element.height;
-                } else if (window.anchorBottom) {
-                    // Bottom anchored
-                    element.height = window.height !== null ? window.height : Math.floor(availableHeight / 2);
-                    element.top = screenHeight - element.height - usedSpace.bottom;
-                    
-                    // Update used space
-                    usedSpace.bottom += element.height;
-                }
-                
-                // Calculate dimensions for left/right anchored windows
-                if (window.anchorLeft && window.anchorRight) {
-                    // Full width window
-                    element.left = usedSpace.left;
-                    element.width = screenWidth - usedSpace.left - usedSpace.right;
-                    
-                    // Update used space
-                    if (window.width !== null) {
-                        const widthValue = Math.min(window.width, screenWidth - usedSpace.left - usedSpace.right);
-                        element.width = widthValue;
-                    }
-                } else if (window.anchorLeft) {
-                    // Left anchored
-                    element.left = usedSpace.left;
-                    element.width = window.width !== null ? window.width : Math.floor(screenWidth / 2);
-                    
-                    // Update used space
-                    usedSpace.left += element.width;
-                } else if (window.anchorRight) {
-                    // Right anchored
-                    element.width = window.width !== null ? window.width : Math.floor(screenWidth / 2);
-                    element.left = screenWidth - element.width - usedSpace.right;
-                    
-                    // Update used space
-                    usedSpace.right += element.width;
-                }
+                fileExplorerWidth = element.width;
             }
         }
         
-        // Second pass: Position floating windows in remaining space
-        const remainingWidth = screenWidth - usedSpace.left - usedSpace.right;
-        const remainingHeight = availableHeight - usedSpace.top - usedSpace.bottom;
-        
-        for (const { window, element } of this.windows) {
-            if (!window.anchorTop && !window.anchorBottom && 
-                !window.anchorLeft && !window.anchorRight) {
+        // Step 2: Place AIPrompt if present (always at bottom)
+        let aiPromptHeight = 0;
+        if (aiPromptEntries.length > 0) {
+            for (const { window, element } of aiPromptEntries) {
+                // Calculate dimensions
+                element.height = window.height || 3; // Default height if not specified
+                element.top = screenHeight - element.height;
+                element.left = fileExplorerWidth; // Start after FileExplorer
+                element.width = screenWidth - fileExplorerWidth;
                 
-                // Floating window - position in remaining space
-                element.top = usedSpace.top;
-                element.left = usedSpace.left;
-                element.width = remainingWidth;
-                element.height = remainingHeight;
+                aiPromptHeight = element.height;
             }
+        }
+        
+        // Step 3: Place other windows in remaining space
+        const hasAIPrompt = aiPromptEntries.length > 0;
+        const hasFileExplorer = fileExplorerEntries.length > 0;
+        
+        for (const { window, element } of otherWindows) {
+            // Default to full screen (minus menu bar)
+            element.top = menuBarHeight;
+            element.left = 0;
+            element.width = screenWidth;
+            element.height = screenHeight - menuBarHeight;
+            
+            // Adjust for FileExplorer if present
+            if (hasFileExplorer) {
+                element.left = fileExplorerWidth;
+                element.width = screenWidth - fileExplorerWidth;
+            }
+            
+            // Adjust for AIPrompt if present
+            if (hasAIPrompt) {
+                element.height = screenHeight - menuBarHeight - aiPromptHeight;
+            }
+        }
+        
+        // Log final window positions
+        logger.debug('WindowService', '=== FINAL WINDOW LAYOUT ===');
+        for (const entry of this.windows) {
+            const { window, element } = entry;
+            const type = window.constructor.name;
+            logger.debug('WindowService', 
+                `${type}: pos(${element.left},${element.top}) size(${element.width}x${element.height})`);
         }
         
         // Redraw all windows
@@ -302,7 +283,7 @@ class WindowService {
         // Update screen
         this.screen.render();
     }
-
+    
     /**
      * Opens a file in a window
      * @param {string} fileName - Name of the file to open
@@ -318,10 +299,11 @@ class WindowService {
         const window = this.windowFactory.createWindow({
             fileName,
             windowService: this,
-            // If file explorer is present, don't anchor to left so it doesn't overlap
+            // If file explorer is present, anchor to all sides except left
+            // Otherwise anchor to all sides
             anchorTop: true,
-            anchorBottom: true,
-            anchorLeft: !hasFileExplorer,
+            anchorBottom: true, 
+            anchorLeft: !hasFileExplorer,  // Don't anchor to left if file explorer exists
             anchorRight: true
         });
         

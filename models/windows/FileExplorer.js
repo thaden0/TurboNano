@@ -26,8 +26,8 @@ class FileExplorer {
         this.selectedIndex = 0;
         
         // Set anchoring properties as specified
-        this.anchorTop = true;      // Anchor to top
-        this.anchorBottom = true;   // Anchor to bottom
+        this.anchorTop = false;      // Anchor to top
+        this.anchorBottom = false;   // Anchor to bottom
         this.anchorLeft = true;     // Anchor to left edge
         this.anchorRight = false;   // Do not anchor to right edge
         this.width = 30;            // Fixed width of 30 characters (increased from 25 for better visibility)
